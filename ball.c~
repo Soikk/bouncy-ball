@@ -1,0 +1,11 @@
+#include <stdio.h>
+#include <stdlib.h>
+
+void back(){
+  printf("\x1b[H")
+}
+
+int main(){
+
+  
+}
