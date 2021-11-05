@@ -3,12 +3,17 @@
 #include <string.h>
 #include <math.h>
 #include <unistd.h>
+#ifdef WIN32
+#include <windows.h>
+#include <conio.h>
+#endif
 
 #define WIDTH 96
 #define HEIGHT 48
-#define FPS 30
+#define FPS 30.f
 #define GRAVITY 2.0f
 #define DECELERATION 0.65f
+#define MARGIN 0.05f
 
 
 typedef enum PIXEL{
@@ -17,7 +22,7 @@ typedef enum PIXEL{
 } PIXEL;
 
 static PIXEL display[WIDTH*HEIGHT];
-static char pixels[4] = " -^C";
+static char pixels[4] = " .'O";
 
 
 
@@ -41,18 +46,34 @@ void clear(){
 }
 
 void move(int x, int y){
+  #ifdef _WIN32
+  COORD coord = {.X = x, .Y = y};
+  SetConsoleCursorPosition(GetStdHandle(STD_OUTPUT_HANDLE), coord);
+  #else
   printf("\033[%d;%dH", y, x);
+  #endif
 }
 
 void hide(int o){
+  #ifndef WIN32
   if(o)
     printf("\e[?25h");
   else
     printf("\e[?251");
+  #endif
 }
 
 void back(){
   move(0, 0);
+}
+
+void csleep(int milliseconds){
+  #ifdef _WIN32
+  Sleep(milliseconds);
+  #else
+  float fmilliseconds = milliseconds/1000;
+  sleep(fmilliseconds);
+  #endif
 }
 
 void clearDisplay(){
@@ -85,64 +106,67 @@ void drawBall(ball b){
     for(int x = min.x; x < max.x; ++x){
       float px = b.center.x - x - 0.5f, py = b.center.y - y - 0.5f;
       if((px*px + py*py) <= b.radius*b.radius){
-	if(x >= 0 && x <= WIDTH && y >= 0 && y <= HEIGHT){
-	  display[x + y*WIDTH] = FULL;
-	};
+        if(x >= 0 && x <= WIDTH && y >= 0 && y <= HEIGHT){
+          display[x + y*WIDTH] = FULL;
+        }
       }
     }
   }
 }
 
 void drawDisplay(){
+  char row[WIDTH];
   for(int y = 0; y < HEIGHT/2; ++y){
     for(int x = 0; x < WIDTH; ++x){
       PIXEL t = display[x + (2*y+0)*WIDTH];
       PIXEL b = display[x + (2*y+1)*WIDTH];
-      putchar(pixels[b + t*2]);
+      row[x] = (pixels[b + t*2]);
     }
+    fwrite(row, sizeof(char), WIDTH, stdout);
     putchar('\n');
   }
 }
 
 int main(){
+
   clear();
   clearDisplay();
   back();
-  hide(0);
+  hide(1);
   ball b = initBall(10, 10, 8);
-  v2 vel = initV2(0, 0.1);
+  v2 vel = initV2(3, 0.1);
   
-  while(vel.y != 0){
+  while(vel.y != 0 || vel.x != 0){
+
+    if(vel.x < MARGIN && vel.x > -MARGIN)
+      vel.x = 0;
+    if(vel.y < MARGIN && vel.y > -MARGIN)
+      vel.y = 0;
+
+
+    vel.y += (GRAVITY/FPS)*(b.center.y+b.radius-HEIGHT < 0);
     
-    int v = 1;
-    if(b.center.y+b.radius-HEIGHT == 0)
-      v = 0;
-    
-    vel.y += (GRAVITY/FPS)*v;
     b.center.x += vel.x;
     b.center.y += vel.y;
-    if(v == 0){
-      printf("CERO: %f\n", vel.y);
-    }
-    printf("v: %f\n", vel.y);
-    getchar();
-    if(b.center.y+b.radius > HEIGHT){
-      b.center.y = HEIGHT - b.radius;
-      //b.center.y -= floor(b.radius*(vel.y*(GRAVITY/FPS)));
-      float a = vel.y;
-      vel.y *= -DECELERATION;
-      printf("\n%f *= -%f = %f", a, DECELERATION, vel.y);
-      getchar();
-    }
 
+    if(b.center.x+b.radius > WIDTH || b.center.x+b.radius+MARGIN > WIDTH){
+      b.center.x = WIDTH - b.radius;
+      vel.x *= -DECELERATION;;
+    }
+    if(b.center.x-b.radius < 0 || b.center.x-b.radius-MARGIN < 0){
+      b.center.x = b.radius;
+      vel.x *= -DECELERATION;
+    }
+    if(b.center.y+b.radius > HEIGHT || b.center.y+b.radius+MARGIN > HEIGHT){
+      b.center.y = HEIGHT - b.radius;
+      vel.y *= -DECELERATION;
+      vel.x *= 1.5*DECELERATION;
+    }
     
-    clear();
     back();
     drawBall(b);
     drawDisplay();
-
-   
-    usleep(1000*1000/FPS);
+    csleep(1000/FPS);
   }
   
   return 0;
